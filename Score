@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบันทึกคะแนนเก็บวิชาภาษาอังกฤษ</title>
+  <style>
+    :root {
+      --color-primary: #E0F7FA;
+      --color-secondary: #E8F5E9;
+      --color-bg: #F5F5F5;
+      --color-white: #FFFFFF;
+      --color-text: #333333;
+      --spacing: 16px;
+      font-family: Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: Arial, sans-serif;
+      min-height: 100vh;
+    }
+    .container, .dashboard { display: none; padding: calc(var(--spacing) * 2); }
+    .container.active, .dashboard.active { display: block; }
+    .login-box {
+      max-width: 400px;
+      margin: 100px auto;
+      background: var(--color-white);
+      padding: calc(var(--spacing) * 2);
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h2 { margin-top: 0; text-align: center; }
+    label { display: block; margin-top: var(--spacing); }
+    input, select, button { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #ccc; border-radius: 4px; }
+    button { background: var(--color-primary); border: none; cursor: pointer; font-size: 16px; }
+    .logout { width: auto; background: var(--color-secondary); position: absolute; top: var(--spacing); right: var(--spacing); }
+    nav { display: flex; gap: var(--spacing); margin-bottom: var(--spacing); }
+    nav button { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin-top: var(--spacing); }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: var(--color-primary); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Login -->
+  <div class="container login-box active" id="login-form">
+    <h2>เข้าสู่ระบบ</h2>
+    <label>ชื่อผู้ใช้<input type="text" id="username" placeholder="ใส่ชื่อผู้ใช้"></label>
+    <label>รหัสผ่าน<input type="password" id="password" placeholder="ใส่รหัสผ่าน"></label>
+    <label>บทบาท<select id="role"><option value="" disabled selected>-- เลือกบทบาท --</option><option value="admin">ผู้ดูแลระบบ</option><option value="student">นักเรียน</option></select></label>
+    <button onclick="handleLogin()">เข้าสู่ระบบ</button>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div class="dashboard active" id="admin-dash" style="display:none; position:relative; max-width:900px; margin:20px auto; background:var(--color-white); border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+    <button class="logout" onclick="logout()">ออกจากระบบ</button>
+    <h2>Admin Dashboard</h2>
+    <nav>
+      <button onclick="showSection('students')">จัดการนักเรียน</button>
+      <button onclick="showSection('items')">หัวข้อคะแนน</button>
+      <button onclick="showSection('entry')">บันทึกคะแนน</button>
+      <button onclick="showSection('summary')">สรุปคะแนน</button>
+    </nav>
+    <!-- Sections -->
+    <div id="section-students" class="section">
+      <h3>จัดการนักเรียน</h3>
+      <button onclick="addStudent()">เพิ่มนักเรียน</button>
+      <table id="students-table"><thead><tr><th>ชื่อ-สกุล</th><th>ID</th><th>รหัสผ่าน</th><th>จัดการ</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="section-items" class="section hidden">
+      <h3>หัวข้อคะแนน</h3>
+      <button onclick="addItem()">เพิ่มหัวข้อ</button>
+      <table id="items-table"><thead><tr><th>หัวข้อ</th><th>คะแนนเต็ม</th><th>จัดการ</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="section-entry" class="section hidden" style="overflow-x:auto;">
+      <h3>บันทึกคะแนน</h3>
+      <button onclick="renderEntry()">รีเฟรชตาราง</button>
+      <table id="entry-table"><thead></thead><tbody></tbody></table>
+      <button onclick="saveEntry()">บันทึก</button>
+    </div>
+    <div id="section-summary" class="section hidden">
+      <h3>สรุปคะแนน</h3>
+      <button onclick="renderSummary()">รีเฟรชสรุป</button>
+      <table id="summary-table"><thead><tr><th>ชื่อ-สกุล</th><th>ID</th><th>คะแนนรวม</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- Student Dashboard -->
+  <div class="dashboard active hidden" id="student-dash" style="position:relative; max-width:600px; margin:20px auto; background:var(--color-white); border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+    <button class="logout" onclick="logout()">ออกจากระบบ</button>
+    <h2>คะแนนของคุณ</h2>
+    <div id="student-summary"></div>
+    <table id="student-table"><thead><tr><th>หัวข้อ</th><th>คะแนนที่ได้</th><th>เต็ม</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <script>
+    // Data stores
+    const users = { admin:{ pw:'12345678' } };
+    let students = []; // { id, name, pw }
+    let items = [];    // { name, max }
+    let scores = {};   // scores[studentId] = { itemName: score }
+
+    // Login
+    function handleLogin(){
+      const u=document.getElementById('username').value;
+      const p=document.getElementById('password').value;
+      const r=document.getElementById('role').value;
+      if(r==='admin' && users[u] && users[u].pw===p){ loginAdmin(); }
+      else if(r==='student' && students.find(s=>s.id===u && s.pw===p)){ loginStudent(u); }
+      else alert('ข้อมูลไม่ถูกต้อง');
+    }
+    function loginAdmin(){ document.getElementById('login-form').style.display='none'; showSection('students'); document.getElementById('admin-dash').style.display='block'; }
+    function loginStudent(id){ document.getElementById('login-form').style.display='none'; renderStudent(id); document.getElementById('student-dash').classList.remove('hidden'); document.getElementById('student-dash').classList.add('active'); }
+    function logout(){ location.reload(); }
+
+    // Navigation
+    function showSection(sec){ ['students','items','entry','summary'].forEach(s=>{ const el=document.getElementById('section-'+s); if(s===sec) el.classList.remove('hidden'); else el.classList.add('hidden'); }); }
+
+    // Students
+    function renderStudents(){ const tb=document.querySelector('#students-table tbody'); tb.innerHTML=''; students.forEach(s=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${s.name}</td><td>${s.id}</td><td>${'*'.repeat(4)}</td><td><button onclick="delStudent('${s.id}')">ลบ</button></td>`; tb.appendChild(tr); }); }
+    function addStudent(){ const name=prompt('ชื่อ-สกุล'); const id=prompt('รหัสประชาชน'); const pw=prompt('รหัสนักเรียน'); if(name&&id&&pw){ students.push({name,id,pw}); renderStudents(); } }
+    function delStudent(id){ students=students.filter(s=>s.id!==id); delete scores[id]; renderStudents(); }
+
+    // Items
+    function renderItems(){ const tb=document.querySelector('#items-table tbody'); tb.innerHTML=''; items.forEach((it,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${it.name}</td><td>${it.max}</td><td><button onclick="delItem(${i})">ลบ</button></td>`; tb.appendChild(tr); }); }
+    function addItem(){ const name=prompt('ชื่อหัวข้อคะแนน'); const max=prompt('คะแนนเต็ม'); if(name&&max){ items.push({name,max}); renderItems(); } }
+    function delItem(idx){ items.splice(idx,1); renderItems(); }
+
+    // Entry
+    function renderEntry(){ const table=document.getElementById('entry-table'); table.querySelector('thead').innerHTML=''; table.querySelector('tbody').innerHTML='';
+      // header
+      const hdr=table.querySelector('thead').insertRow(); hdr.insertCell().innerText='ชื่อ-สกุล'; students.forEach(it=>hdr.insertCell().innerText=it.name);
+      // rows
+      items.forEach(it=>{ const row=table.insertRow(); row.insertCell().innerText=it.name; students.forEach(s=>{ const idx=scores[s.id]||{}; const val = idx[it.name]||0; const cell=row.insertCell(); cell.innerHTML=`<input type="number" min="0" max="${it.max}" value="${val}" style="width:60px;">`; }); });
+    }
+    function saveEntry(){ const table=document.getElementById('entry-table'); const rows=table.rows; for(let r=1;r<rows.length;r++){ const itemName=rows[r].cells[0].innerText; students.forEach((s,c)=>{ const inp=rows[r].cells[c+1].querySelector('input'); scores[s.id] = scores[s.id]||{}; scores[s.id][itemName] = Number(inp.value); }); } alert('บันทึกเรียบร้อย'); }
+
+    // Summary
+    function renderSummary(){ const tb=document.querySelector('#summary-table tbody'); tb.innerHTML=''; students.forEach(s=>{ let total=0; const st = scores[s.id]||{}; items.forEach(it=> total += (st[it.name]||0)); const tr=document.createElement('tr'); tr.innerHTML=`<td>${s.name}</td><td>${s.id}</td><td>${total}</td>`; tb.appendChild(tr); }); }
+
+    // Student View
+    function renderStudent(id){ const st=scores[id]||{};
+      document.getElementById('student-dash').style.display='block';
+      const tb=document.querySelector('#student-table tbody'); tb.innerHTML=''; items.forEach(it=>{ const sc=st[it.name]||0; const tr=document.createElement('tr'); tr.innerHTML=`<td>${it.name}</td><td>${sc}</td><td>${it.max}</td>`; tb.appendChild(tr); });
+      const done=items.reduce((a,it)=> a + ((st[it.name]||0)>0?1:0),0);
+      document.getElementById('student-summary').innerText = `คุณทำงานแล้ว ${done}/${items.length} รายการ`;
+    }
+  </script>
+</body>
+</html>
